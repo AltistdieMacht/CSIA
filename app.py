@@ -16,56 +16,61 @@ spotify_client = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
 
 @app.route('/')
 def home():
-    # Display the homepage with the form
+   
     return render_template('index.html')
 
 @app.route('/recommend', methods=['POST'])
 def recommend():
+    
     try:
-        # Get user input
-        user_genre = request.form.get('genre', 'Pop')
-        user_artist = request.form.get('artist', 'Taylor Swift')
-        user_mood = request.form.get('mood', 'Happy')
+        # Get user input from the form
+        user_genre = request.form.get('genre', 'Pop').strip()
+        user_artist = request.form.get('artist', 'Taylor Swift').strip()
 
-        # Search for the artist
+        # Search for the artist in Spotify's database
         artist_search = spotify_client.search(q=f"artist:{user_artist}", type='artist', limit=1)
         if not artist_search['artists']['items']:
-            return render_template('index.html', error=f"No artist named '{user_artist}' found. Try again!")
+            return render_template('index.html', error=f"No artist named '{user_artist}' found. Please try again!")
 
-        # Get artist ID
+        # Extract the artist ID for recommendations
         artist_id = artist_search['artists']['items'][0]['id']
 
-        # Fetch recommendations
+        # Fetch recommendations based on the artist and genre
         recommendations = spotify_client.recommendations(seed_genres=[user_genre.lower()],
                                                          seed_artists=[artist_id],
-                                                         limit=5)
+                                                         limit=10)
 
-        # Process recommendations
+
         song_recommendations = []
         for track in recommendations['tracks']:
+            # Spotify popularity 
             spotify_popularity = track['popularity']
-            mood_match_score = 100 if user_mood.lower() in track['name'].lower() else 50
+
+            # Artist match 
+            artist_match_score = 100 if any(artist['id'] == artist_id for artist in track['artists']) else 50
+
+            # Genre match 
             genre_match_score = 100 if user_genre.lower() in [g.lower() for g in track['album']['genres']] else 50
 
-            # Custom popularity calculation
-            custom_popularity = (spotify_popularity * 0.6) + (mood_match_score * 0.3) + (genre_match_score * 0.1)
+            # Adjusted score 
+            adjusted_score = (spotify_popularity * 0.5) + (artist_match_score * 0.3) + (genre_match_score * 0.2)
 
+            # Append song details and score
             song_recommendations.append({
                 "title": track['name'],
                 "artist": ", ".join([artist['name'] for artist in track['artists']]),
                 "link": track['external_urls']['spotify'],
                 "image": track['album']['images'][0]['url'],
-                "custom_popularity": round(custom_popularity, 2)
+                "adjusted_score": round(adjusted_score, 2)
             })
 
-        # Sort songs by custom popularity
-        song_recommendations.sort(key=lambda x: x['custom_popularity'], reverse=True)
+        # Sort songs by the score 
+        song_recommendations.sort(key=lambda x: x['adjusted_score'], reverse=True)
 
-        # Render the results page
         return render_template('results.html', recommendations=song_recommendations)
 
     except Exception as e:
-        # Handle errors
+        #  show an error message
         return render_template('index.html', error=f"An error occurred: {str(e)}")
 
 if __name__ == '__main__':
