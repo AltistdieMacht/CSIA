@@ -1,73 +1,62 @@
-// Ensure the script runs only after the page is fully loaded
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("The website is ready to recommend some music!");
+    console.log("Script loaded and ready!");
 
-    // Grab the form and the results container
     const form = document.getElementById("music-form");
     const resultsDiv = document.getElementById("results");
 
-    // Event listener for form submission
     form.addEventListener("submit", async (event) => {
-        event.preventDefault(); // Prevent the page from reloading
+        event.preventDefault(); // Prevent form submission
 
-        // Get user inputs
+        // Get user input
         const genre = document.getElementById("genre").value.trim();
         const artist = document.getElementById("artist").value.trim();
-        const mood = document.getElementById("mood").value.trim();
 
-        // Clear previous results
-        resultsDiv.innerHTML = "";
-
-        // Log user inputs for debugging
-        console.log(`Searching for songs with genre: "${genre}", artist: "${artist}", mood: "${mood}".`);
+        // Validate input
+        if (!genre || !artist) {
+            alert("Please fill out both fields.");
+            return;
+        }
 
         try {
-            // Send data to the server
+            // Send request to server
             const response = await fetch("/recommend", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded",
                 },
-                body: new URLSearchParams({ genre, artist, mood }),
+                body: new URLSearchParams({ genre, artist }),
             });
 
-            // Handle the server's response
             const data = await response.json();
 
-            // Check if there is an error in the response
+            // Clear previous results
+            resultsDiv.innerHTML = "";
+
+            // Handle errors
             if (data.error) {
-                resultsDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
-                console.error("Server Error:", data.error);
+                resultsDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
                 return;
             }
 
-            // Check if recommendations exist
-            if (data.recommendations && data.recommendations.length > 0) {
-                const list = document.createElement("ul");
-                list.classList.add("list-group");
-
-                data.recommendations.forEach((song) => {
-                    const listItem = document.createElement("li");
-                    listItem.classList.add("list-group-item", "d-flex", "justify-content-between", "align-items-center");
-
-                    listItem.innerHTML = `
-                        <div>
-                            <strong>${song.title}</strong> by ${song.artist}
+            // Render recommendations
+            data.recommendations.forEach((song) => {
+                const card = document.createElement("div");
+                card.className = "col-md-4 mb-4";
+                card.innerHTML = `
+                    <div class="card h-100">
+                        <img src="${song.image || 'https://via.placeholder.com/150'}" class="card-img-top" alt="${song.title}">
+                        <div class="card-body">
+                            <h5 class="card-title">${song.title}</h5>
+                            <p class="card-text">Artist: ${song.artist}</p>
+                            <a href="${song.link}" class="btn btn-primary" target="_blank">Listen on Spotify</a>
                         </div>
-                        <a href="${song.link}" target="_blank" class="btn btn-success btn-sm">Listen on Spotify</a>
-                    `;
-                    list.appendChild(listItem);
-                });
-
-                resultsDiv.appendChild(list);
-            } else {
-                // If no recommendations are found
-                resultsDiv.innerHTML = "<p>No songs found. Please try different inputs.</p>";
-            }
+                    </div>
+                `;
+                resultsDiv.appendChild(card);
+            });
         } catch (error) {
-            // Handle unexpected errors
-            console.error("Something went wrong:", error);
-            resultsDiv.innerHTML = `<p style="color: red;">Oops! Something went wrong. Please try again later.</p>`;
+            console.error("Error fetching recommendations:", error);
+            resultsDiv.innerHTML = `<div class="alert alert-danger">Something went wrong. Please try again later.</div>`;
         }
     });
 });
