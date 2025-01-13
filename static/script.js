@@ -1,19 +1,25 @@
-
+// Ensure the script runs only after the page is fully loaded
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("Welcome! The Website is ready to recommend you some music.");
+    console.log("The website is ready to recommend some music!");
 
+    // Grab the form and the results container
     const form = document.getElementById("music-form");
     const resultsDiv = document.getElementById("results");
 
+    // Event listener for form submission
     form.addEventListener("submit", async (event) => {
-        event.preventDefault(); 
+        event.preventDefault(); // Prevent the page from reloading
 
         // Get user inputs
-        const genre = document.getElementById("genre").value;
-        const artist = document.getElementById("artist").value;
-        const mood = document.getElementById("mood").value;
+        const genre = document.getElementById("genre").value.trim();
+        const artist = document.getElementById("artist").value.trim();
+        const mood = document.getElementById("mood").value.trim();
 
-        console.log(`Looking for songs in the genre "${genre}" by "${artist}" while feeling "${mood}".`);
+        // Clear previous results
+        resultsDiv.innerHTML = "";
+
+        // Log user inputs for debugging
+        console.log(`Searching for songs with genre: "${genre}", artist: "${artist}", mood: "${mood}".`);
 
         try {
             // Send data to the server
@@ -25,33 +31,41 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: new URLSearchParams({ genre, artist, mood }),
             });
 
+            // Handle the server's response
             const data = await response.json();
-            resultsDiv.innerHTML = ""; // Clear old results
 
+            // Check if there is an error in the response
             if (data.error) {
-                resultsDiv.innerHTML = `<p style="color: red;">${data.error}</p>`;
-                console.warn("Server Error:", data.error);
+                resultsDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                console.error("Server Error:", data.error);
                 return;
             }
 
-            // Display recommendations
+            // Check if recommendations exist
             if (data.recommendations && data.recommendations.length > 0) {
                 const list = document.createElement("ul");
+                list.classList.add("list-group");
 
                 data.recommendations.forEach((song) => {
                     const listItem = document.createElement("li");
+                    listItem.classList.add("list-group-item", "d-flex", "justify-content-between", "align-items-center");
+
                     listItem.innerHTML = `
-                        <strong>${song.title}</strong> by ${song.artist}
-                        <a href="${song.link}" target="_blank">Listen on Spotify</a>
+                        <div>
+                            <strong>${song.title}</strong> by ${song.artist}
+                        </div>
+                        <a href="${song.link}" target="_blank" class="btn btn-success btn-sm">Listen on Spotify</a>
                     `;
                     list.appendChild(listItem);
                 });
 
                 resultsDiv.appendChild(list);
             } else {
-                resultsDiv.innerHTML = "<p>No songs found. Maybe try different inputs?</p>";
+                // If no recommendations are found
+                resultsDiv.innerHTML = "<p>No songs found. Please try different inputs.</p>";
             }
         } catch (error) {
+            // Handle unexpected errors
             console.error("Something went wrong:", error);
             resultsDiv.innerHTML = `<p style="color: red;">Oops! Something went wrong. Please try again later.</p>`;
         }
