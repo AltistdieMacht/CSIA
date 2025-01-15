@@ -29,44 +29,47 @@ def home():
 @app.route('/recommend', methods=['POST'])
 def recommend():
     try:
-        # Get user input
-        user_genre = request.form.get('genre', '').strip().lower()
-        user_artist = request.form.get('artist', '').strip()
+        # Form-Daten abrufen
+        user_genre = request.form.get('genre', 'Pop').strip().lower()
+        user_artist = request.form.get('artist', 'Taylor Swift').strip()
 
-        # Validate inputs
-        if not user_genre or user_genre not in valid_genres:
-            user_genre = "pop"  # Default to 'pop' if invalid
-        if not user_artist:
-            return jsonify({"error": "Please provide a valid artist."})
-
-        # Search for the artist
+        # Artist-ID abrufen
         artist_search = spotify_client.search(q=f"artist:{user_artist}", type='artist', limit=1)
         if not artist_search['artists']['items']:
-            return jsonify({"error": f"No artist named '{user_artist}' found. Please try again."})
+            return render_template('index.html', error=f"No artist found for '{user_artist}'. Try again!")
 
-        # Get artist ID
         artist_id = artist_search['artists']['items'][0]['id']
 
-        # Fetch recommendations
+        # Unterstützte Genres prüfen
+        supported_genres = spotify_client.recommendation_genre_seeds()['genres']
+        if user_genre not in supported_genres:
+            return render_template('index.html', error=f"Genre '{user_genre}' not supported. Try one of: {', '.join(supported_genres)}")
+
+        # Empfehlungen abrufen
         recommendations = spotify_client.recommendations(seed_genres=[user_genre],
                                                          seed_artists=[artist_id],
                                                          limit=10)
 
-        # Process recommendations
+        if not recommendations['tracks']:
+            return render_template('index.html', error="No recommendations found. Try different inputs!")
+
+        # Ergebnisse formatieren
         song_recommendations = []
         for track in recommendations['tracks']:
             song_recommendations.append({
                 "title": track['name'],
                 "artist": ", ".join([artist['name'] for artist in track['artists']]),
                 "link": track['external_urls']['spotify'],
-                "image": track['album']['images'][0]['url'] if track['album']['images'] else None
+                "image": track['album']['images'][0]['url']
             })
 
-        return jsonify({"recommendations": song_recommendations})
+        # Ergebnisse anzeigen
+        return render_template('results.html', recommendations=song_recommendations)
 
     except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"error": "An unexpected error occurred. Please try again later."})
+        print(f"Error occurred: {e}")
+        return render_template('index.html', error="An error occurred. Please try again later.")
+
 
 if __name__ == '__main__':
     app.run(debug=True)
