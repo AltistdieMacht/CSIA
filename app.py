@@ -21,35 +21,35 @@ spotify_client = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
 
 @app.route('/')
 def home():
+    """Render the homepage."""
     return render_template('index.html')
 
 @app.route('/recommend', methods=['POST'])
 def recommend():
+    """Handle recommendation requests."""
     try:
         # Retrieve form data
         user_genre = request.form.get('genre', '').strip().lower()
         user_artist = request.form.get('artist', '').strip()
         user_mood = request.form.get('mood', '').strip()
 
+        # Validate inputs
         if not user_genre or not user_artist or not user_mood:
             return render_template('index.html', error="Please fill out all fields: Genre, Artist, and Mood.")
 
-        # Fetch artist data
+        # Search for artist
         artist_search = spotify_client.search(q=f"artist:{user_artist}", type='artist', limit=1)
         if not artist_search['artists']['items']:
             return render_template('index.html', error=f"No artist found for '{user_artist}'. Please try again.")
 
         artist_id = artist_search['artists']['items'][0]['id']
 
-        # Fetch valid genres
-        supported_genres = spotify_client.recommendation_genre_seeds()['genres']
-        if user_genre not in supported_genres:
-            return render_template('index.html', error=f"Genre '{user_genre}' not supported. Try one of: {', '.join(supported_genres)}")
-
         # Fetch recommendations
-        recommendations = spotify_client.recommendations(seed_genres=[user_genre],
-                                                         seed_artists=[artist_id],
-                                                         limit=10)
+        recommendations = spotify_client.recommendations(
+            seed_genres=[user_genre],
+            seed_artists=[artist_id],
+            limit=10
+        )
 
         if not recommendations['tracks']:
             return render_template('index.html', error="No recommendations found. Try different inputs.")
@@ -57,19 +57,18 @@ def recommend():
         # Format results with custom score
         song_recommendations = []
         for track in recommendations['tracks']:
-            spotify_popularity = track['popularity']  # From Spotify
+            spotify_popularity = track['popularity']
             mood_match_score = 100 if user_mood.lower() in track['name'].lower() else 50
-            genre_match_score = 100 if user_genre in track['album']['name'].lower() else 50
 
             # Calculate custom score
-            popularity = (spotify_popularity * 0.6) + (mood_match_score * 0.3) + (genre_match_score * 0.1)
+            popularity = (spotify_popularity * 0.7) + (mood_match_score * 0.3)
 
             song_recommendations.append({
                 "title": track['name'],
                 "artist": ", ".join([artist['name'] for artist in track['artists']]),
                 "link": track['external_urls']['spotify'],
                 "image": track['album']['images'][0]['url'] if track['album']['images'] else None,
-                "popularity": round(popularity, 2)  # Include custom score
+                "popularity": round(popularity, 2)
             })
 
         # Sort recommendations by custom score
@@ -77,8 +76,11 @@ def recommend():
 
         return render_template('results.html', recommendations=song_recommendations, mood=user_mood)
 
+    except spotipy.exceptions.SpotifyException as se:
+        print(f"Spotify API error: {se}")
+        return render_template('index.html', error="There was an issue with the Spotify API. Please try again later.")
     except Exception as e:
-        print(f"Error occurred: {e}")
+        print(f"Unexpected error: {e}")
         return render_template('index.html', error="An unexpected error occurred. Please try again later.")
 
 if __name__ == '__main__':
