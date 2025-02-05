@@ -23,7 +23,6 @@ spotify_client = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
 def home():
     """Render the homepage."""
     return render_template('index.html')
-
 @app.route('/recommend', methods=['GET', 'POST'])
 def recommend():
     print(f"🔹 Incoming request: {request.method}")
@@ -92,6 +91,7 @@ def recommend():
     except Exception as e:
         print(f"⚠️ Unexpected error: {e}")
         return render_template('index.html', error="An unexpected error occurred. Please try again later.")
+
 
 if __name__ == '__main__':
     app.run(debug=True)
