@@ -24,11 +24,14 @@ def home():
     """Render the homepage."""
     return render_template('index.html')
 
-@app.route('/recommend', methods=['POST'])
+@app.route('/recommend', methods=['GET', 'POST'])
 def recommend():
     """Handle recommendation requests."""
     try:
-        # Retrieve form data
+        if request.method == 'GET':
+            return render_template('index.html')  # Zeigt einfach das Formular an
+
+        # Ab hier läuft nur der POST-Teil
         user_genre = request.form.get('genre', '').strip().lower()
         user_artist = request.form.get('artist', '').strip()
         user_mood = request.form.get('mood', '').strip()
@@ -82,6 +85,7 @@ def recommend():
     except Exception as e:
         print(f"Unexpected error: {e}")
         return render_template('index.html', error="An unexpected error occurred. Please try again later.")
+
 
 if __name__ == '__main__':
     app.run(debug=True)
