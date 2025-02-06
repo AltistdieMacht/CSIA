@@ -23,33 +23,52 @@ spotify_client = spotipy.Spotify(
 
 @app.route('/recommend', methods=['GET', 'POST'])
 def recommend():
+    print(f"🔹 Incoming request: {request.method}")
+
     if request.method == 'GET':
+        print("✅ GET request received. Returning index.html")
         return render_template('index.html')
+
+    print(f"🔹 Form Data Received: {request.form}")
 
     user_genre = request.form.get('genre', '').strip().lower()
     user_artist = request.form.get('artist', '').strip()
     user_mood = request.form.get('mood', '').strip()
 
+    print(f"🔹 Extracted Data - Genre: {user_genre}, Artist: {user_artist}, Mood: {user_mood}")
+
     if not user_genre or not user_artist or not user_mood:
+        print("⚠️ Error: Missing form fields!")
         return render_template('index.html', error="Please fill out all fields.")
 
     try:
-        # 1️⃣ Fetch artist ID
+        # 1️⃣ Suche nach Artist-ID
         artist_search = spotify_client.search(q=f"artist:{user_artist}", type='artist', limit=1)
+        print(f"🔹 Spotify Artist Search Result: {artist_search}")
+
         if not artist_search['artists']['items']:
+            print(f"⚠️ Error: No artist found for '{user_artist}'")
             return render_template('index.html', error=f"No artist found for '{user_artist}'.")
 
         artist_id = artist_search['artists']['items'][0]['id']
 
-        # 2️⃣ Find similar artists
+        # 2️⃣ Ähnliche Künstler finden
         related_artists = spotify_client.artist_related_artists(artist_id)
+        if not related_artists['artists']:
+            print("⚠️ Error: No related artists found!")
+            return render_template('index.html', error="No related artists found.")
+
         similar_artists = [artist['id'] for artist in related_artists['artists'][:5]]
 
-        # 3️⃣ Get top tracks from similar artists
+        # 3️⃣ Top-Tracks der ähnlichen Künstler holen
         recommended_tracks = []
         for artist in similar_artists:
             top_tracks = spotify_client.artist_top_tracks(artist)
-            for track in top_tracks['tracks'][:2]:  # Take the top 2 songs per artist
+            if not top_tracks['tracks']:
+                print(f"⚠️ Warning: No tracks found for artist {artist}")
+                continue
+
+            for track in top_tracks['tracks'][:2]:  # Maximal 2 Songs pro Künstler
                 recommended_tracks.append({
                     "title": track['name'],
                     "artist": ", ".join([a['name'] for a in track['artists']]),
@@ -57,8 +76,17 @@ def recommend():
                     "image": track['album']['images'][0]['url'] if track['album']['images'] else None
                 })
 
-        # 4️⃣ Shuffle and return the recommendations
+        print(f"🔹 Recommended Tracks: {recommended_tracks}")
+
+        # Falls keine Songs gefunden wurden
+        if not recommended_tracks:
+            print("⚠️ Error: No recommendations found!")
+            return render_template('index.html', error="No recommendations found. Try different inputs.")
+
+        # Songs zufällig sortieren
+        import random
         random.shuffle(recommended_tracks)
+
         return render_template('results.html', recommendations=recommended_tracks, mood=user_mood)
 
     except spotipy.exceptions.SpotifyException as se:
