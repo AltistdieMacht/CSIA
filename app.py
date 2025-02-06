@@ -1,7 +1,6 @@
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from flask import Flask, request, render_template, jsonify
-import random
 import os
 
 print("🔍 TEST: Spotify CLIENT_ID =", os.getenv("CLIENT_ID"))
@@ -44,7 +43,7 @@ def recommend():
         return render_template('index.html', error="Please fill out all fields.")
 
     try:
-        # 1️⃣ Suche nach Artist-ID
+        # 1️⃣ Search for Artist ID
         artist_search = spotify_client.search(q=f"artist:{user_artist}", type='artist', limit=1)
         print(f"🔹 Spotify Artist Search Result: {artist_search}")
 
@@ -54,48 +53,35 @@ def recommend():
 
         artist_id = artist_search['artists']['items'][0]['id']
 
-        # 2️⃣ Alternative: Ähnliche Künstler durch Suche basierend auf Genre
-        try:
-            print(f"⚠️ '/related-artists' is deprecated. Using alternative method.")
+        # 2️⃣ Alternative: Search for Top Artists in Genre
+        print(f"⚠️ '/related-artists' is deprecated. Using alternative method.")
+        genre_artists = spotify_client.search(q=f'genre:{user_genre}', type='artist', limit=5)
+        
+        if 'artists' in genre_artists and 'items' in genre_artists['artists']:
+            similar_artists = [artist['id'] for artist in genre_artists['artists']['items']]
+            print(f"🔹 Found alternative artists: {similar_artists}")
+        else:
+            print("⚠️ No alternative artists found via search!")
+            return render_template('index.html', error="Could not find similar artists.")
 
-            # Suche nach anderen Künstlern im gleichen Genre
-            related_artists = spotify_client.search(q=user_genre, type='artist', limit=5)
-            if 'artists' in related_artists and 'items' in related_artists['artists']:
-                similar_artists = [artist['id'] for artist in related_artists['artists']['items']]
-                print(f"🔹 Found alternative artists: {similar_artists}")
-            else:
-                print("⚠️ No alternative artists found via search!")
-                return render_template('index.html', error="Could not find similar artists.")
-
-        except Exception as e:
-            print(f"⚠️ Spotify API error in alternative artist search: {e}")
-            return render_template('index.html', error="Spotify API error. Please try again later.")
-
-        # 3️⃣ Top-Tracks der ähnlichen Künstler holen
+        # 3️⃣ Fetch Top Tracks from Similar Artists
         recommended_tracks = []
         for artist in similar_artists:
             top_tracks = spotify_client.artist_top_tracks(artist)
-            if not top_tracks['tracks']:
-                print(f"⚠️ Warning: No tracks found for artist {artist}")
-                continue
-
-            for track in top_tracks['tracks'][:2]:  # Maximal 2 Songs pro Künstler
+            
+            for track in top_tracks['tracks'][:2]:  # Max 2 songs per artist
+                popularity_score = calculate_custom_popularity(track['popularity'])
                 recommended_tracks.append({
                     "title": track['name'],
                     "artist": ", ".join([a['name'] for a in track['artists']]),
                     "link": track['external_urls']['spotify'],
-                    "image": track['album']['images'][0]['url'] if track['album']['images'] else None
+                    "image": track['album']['images'][0]['url'] if track['album']['images'] else None,
+                    "popularity": popularity_score  # Adding Custom Popularity Score
                 })
 
-        print(f"🔹 Recommended Tracks: {recommended_tracks}")
-
-        # Falls keine Songs gefunden wurden
-        if not recommended_tracks:
-            print("⚠️ Error: No recommendations found!")
-            return render_template('index.html', error="No recommendations found. Try different inputs.")
-
-        # Songs zufällig sortieren
-        random.shuffle(recommended_tracks)
+        # 4️⃣ Sort by Popularity
+        recommended_tracks = sorted(recommended_tracks, key=lambda x: x['popularity'], reverse=True)
+        print(f"🔹 Final Sorted Tracks: {recommended_tracks}")
 
         return render_template('results.html', recommendations=recommended_tracks, mood=user_mood)
 
@@ -105,6 +91,12 @@ def recommend():
     except Exception as e:
         print(f"⚠️ Unexpected error: {e}")
         return render_template('index.html', error="An unexpected error occurred. Please try again later.")
+
+def calculate_custom_popularity(spotify_popularity):
+    """
+    Custom Popularity Score: Adjusts Spotify popularity (0-100) to a finer scale.
+    """
+    return round((spotify_popularity / 100) * 10, 2)  # Scaling to a range of 1-10
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=True)
