@@ -2,12 +2,15 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from flask import Flask, request, render_template, jsonify
 import random
+import os
+print("🔍 TEST: Spotify CLIENT_ID =", os.getenv("CLIENT_ID"))
+print("🔍 TEST: Spotify CLIENT_SECRET =", os.getenv("CLIENT_SECRET"))
 
 app = Flask(__name__)
 
 # Spotify API Setup
-SPOTIFY_CLIENT_ID = "YOUR_CLIENT_ID"
-SPOTIFY_CLIENT_SECRET = "YOUR_CLIENT_SECRET"
+SPOTIFY_CLIENT_ID = os.getenv("CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
 spotify_client = spotipy.Spotify(
     client_credentials_manager=SpotifyClientCredentials(
