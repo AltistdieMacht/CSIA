@@ -52,10 +52,12 @@ def recommend():
             return render_template('index.html', error=f"No artist found for '{user_artist}'.")
 
         artist_id = artist_search['artists']['items'][0]['id']
+        artist_genres = artist_search['artists']['items'][0]['genres']
+        print(f"🔹 Artist Genres: {artist_genres}")
 
-        # 2️⃣ Alternative: Search for Top Artists in Genre
-        print(f"⚠️ '/related-artists' is deprecated. Using alternative method.")
-        genre_artists = spotify_client.search(q=f'genre:{user_genre}', type='artist', limit=5)
+        # 2️⃣ Find Top Artists in the Same Genre
+        genre_query = ' '.join([f'genre:{g}' for g in artist_genres]) if artist_genres else f'genre:{user_genre}'
+        genre_artists = spotify_client.search(q=genre_query, type='artist', limit=5)
         
         if 'artists' in genre_artists and 'items' in genre_artists['artists']:
             similar_artists = [artist['id'] for artist in genre_artists['artists']['items']]
@@ -64,20 +66,23 @@ def recommend():
             print("⚠️ No alternative artists found via search!")
             return render_template('index.html', error="Could not find similar artists.")
 
-        # 3️⃣ Fetch Top Tracks from Similar Artists
+        # 3️⃣ Get Top Tracks from Similar Artists, Ensuring Genre Match
         recommended_tracks = []
         for artist in similar_artists:
             top_tracks = spotify_client.artist_top_tracks(artist)
             
             for track in top_tracks['tracks'][:2]:  # Max 2 songs per artist
-                popularity_score = calculate_custom_popularity(track['popularity'])
-                recommended_tracks.append({
-                    "title": track['name'],
-                    "artist": ", ".join([a['name'] for a in track['artists']]),
-                    "link": track['external_urls']['spotify'],
-                    "image": track['album']['images'][0]['url'] if track['album']['images'] else None,
-                    "popularity": popularity_score  # Adding Custom Popularity Score
-                })
+                track_genres = get_artist_genres(track['artists'][0]['id'])
+                
+                if any(genre in track_genres for genre in artist_genres):  # Ensure genre match
+                    popularity_score = calculate_custom_popularity(track['popularity'])
+                    recommended_tracks.append({
+                        "title": track['name'],
+                        "artist": ", ".join([a['name'] for a in track['artists']]),
+                        "link": track['external_urls']['spotify'],
+                        "image": track['album']['images'][0]['url'] if track['album']['images'] else None,
+                        "popularity": popularity_score  # Custom Popularity Score
+                    })
 
         # 4️⃣ Sort by Popularity
         recommended_tracks = sorted(recommended_tracks, key=lambda x: x['popularity'], reverse=True)
@@ -94,9 +99,15 @@ def recommend():
 
 def calculate_custom_popularity(spotify_popularity):
     """
-    Custom Popularity Score: Adjusts Spotify popularity (0-100) to a finer scale.
+    Custom Popularity Score: Adjusts Spotify's 0-100 scale for better ranking.
     """
-    return round((spotify_popularity / 100) * 10, 2)  # Scaling to a range of 1-10
+    return round((spotify_popularity / 100) * 10, 2)  # Scale to 1-10
+
+
+def get_artist_genres(artist_id):
+    """ Fetch the genres for a given artist ID """
+    artist = spotify_client.artist(artist_id)
+    return artist.get('genres', [])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=True)
