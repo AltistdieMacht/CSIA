@@ -53,17 +53,28 @@ def recommend():
         
         artist_id = artist_search['artists']['items'][0]['id']
         
-        # Get tracks from genre that also match mood and artist similarity
-        print("🔹 Searching for songs in genre")
-        genre_tracks = spotify_client.search(q=f'genre:{user_genre}', type='track', limit=20)
+        # Get related artists
+        related_artists = spotify_client.artist_related_artists(artist_id)
+        similar_artist_ids = [artist['id'] for artist in related_artists['artists'][:5]]
         
+        # Get tracks from related artists and genre
         recommended_tracks = []
-        for track in genre_tracks['tracks']['items']:
+        for artist_id in similar_artist_ids:
+            artist_top_tracks = spotify_client.artist_top_tracks(artist_id)
+            recommended_tracks.extend(artist_top_tracks['tracks'])
+        
+        if not recommended_tracks:
+            print("⚠️ No matching songs found! Fetching genre-based tracks as fallback.")
+            genre_tracks = spotify_client.search(q=f'genre:{user_genre}', type='track', limit=10)
+            recommended_tracks = genre_tracks['tracks']['items']
+        
+        processed_tracks = []
+        for track in recommended_tracks:
             print(f"✔️ Processing Track: {track['name']} - {track['artists'][0]['name']}")
             
             track_features = get_audio_features(track['id'])
             if not track_features:
-                print(f"⚠️ Track '{track['name']}' übersprungen – keine Audio-Features verfügbar.")
+                print(f"⚠️ Track '{track['name']}' skipped – no audio features available.")
                 continue
             
             # Calculate mood matching score
@@ -72,7 +83,7 @@ def recommend():
             # Calculate final recommendation score
             recommendation_score = (calculate_custom_popularity(track['popularity']) + mood_score) / 2
             
-            recommended_tracks.append({
+            processed_tracks.append({
                 "title": track['name'],
                 "artist": ", ".join([a['name'] for a in track['artists']]),
                 "link": track['external_urls']['spotify'],
@@ -81,10 +92,10 @@ def recommend():
             })
         
         # Sort by combined popularity and mood match score
-        recommended_tracks = sorted(recommended_tracks, key=lambda x: x['popularity'], reverse=True)
-        print(f"🔹 Final Sorted Tracks: {recommended_tracks}")
+        processed_tracks = sorted(processed_tracks, key=lambda x: x['popularity'], reverse=True)
+        print(f"🔹 Final Sorted Tracks: {processed_tracks}")
         
-        return render_template('results.html', recommendations=recommended_tracks, mood=user_mood)
+        return render_template('results.html', recommendations=processed_tracks, mood=user_mood)
     
     except spotipy.exceptions.SpotifyException as se:
         print(f"⚠️ Spotify API error: {se}")
@@ -101,7 +112,7 @@ def calculate_custom_popularity(spotify_popularity):
 
 def get_audio_features(track_id):
     """
-    Tries to fetch audio features for a given track, handles errors cleanly.
+    Fetch audio features for a given track and handle errors.
     """
     try:
         features = spotify_client.audio_features(track_id)
