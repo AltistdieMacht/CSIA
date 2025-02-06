@@ -7,6 +7,9 @@ print("🔍 TEST: Spotify CLIENT_ID =", os.getenv("CLIENT_ID"))
 print("🔍 TEST: Spotify CLIENT_SECRET =", os.getenv("CLIENT_SECRET"))
 
 app = Flask(__name__)
+@app.route('/')
+def home():
+    return "✅ Flask App is Running on Render!"
 
 # Spotify API Setup
 SPOTIFY_CLIENT_ID = os.getenv("CLIENT_ID")
