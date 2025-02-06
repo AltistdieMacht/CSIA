@@ -103,6 +103,17 @@ def calculate_recommendation_score(popularity, mood, track_features):
 def get_artist_genres(artist_id):
     artist = spotify_client.artist(artist_id)
     return artist.get('genres', [])
+def get_audio_features(track_id):
+    """Fetch audio features for a given track ID with error handling."""
+    try:
+        features = spotify_client.audio_features(track_id)
+        if not features or features[0] is None:
+            print(f"⚠️ ERROR: No audio features found for track {track_id}")
+            return {}
+        return features[0]
+    except spotipy.exceptions.SpotifyException as e:
+        print(f"⚠️ Spotify API error on audio-features: {e}")
+        return {}
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=True)
