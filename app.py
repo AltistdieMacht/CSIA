@@ -61,11 +61,10 @@ def recommend():
         for track in genre_tracks['tracks']['items']:
             print(f"✔️ Processing Track: {track['name']} - {track['artists'][0]['name']}")
             
-        track_features = get_audio_features(track['id'])
-if not track_features:
-    print(f"⚠️ Track '{track['name']}' übersprungen – keine Audio-Features verfügbar.")
-    continue
- 
+            track_features = get_audio_features(track['id'])
+            if not track_features:
+                print(f"⚠️ Track '{track['name']}' übersprungen – keine Audio-Features verfügbar.")
+                continue
             
             # Calculate mood matching score
             mood_score = calculate_mood_match(track_features, user_mood)
@@ -99,16 +98,19 @@ def calculate_custom_popularity(spotify_popularity):
     Custom Popularity Score: Converts Spotify's popularity (0-100) to a 1-10 scale.
     """
     return round((spotify_popularity / 100) * 10, 2)
+
 def get_audio_features(track_id):
-    """Versucht, Audio Features für einen Song zu holen, behandelt Fehler sauber."""
+    """
+    Tries to fetch audio features for a given track, handles errors cleanly.
+    """
     try:
         features = spotify_client.audio_features(track_id)
         if not features or features[0] is None:
-            print(f"⚠️ Keine Audio-Features für Track-ID: {track_id}")
+            print(f"⚠️ No audio features found for track ID: {track_id}")
             return {}
         return features[0]
     except spotipy.exceptions.SpotifyException as e:
-        print(f"⚠️ Spotify API Fehler für Audio-Features (403 oder Rate Limit?): {e}")
+        print(f"⚠️ Spotify API error for audio features (403 or Rate Limit?): {e}")
         return {}
 
 def calculate_mood_match(track_features, user_mood):
