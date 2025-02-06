@@ -3,13 +3,11 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from flask import Flask, request, render_template, jsonify
 import random
 import os
+
 print("🔍 TEST: Spotify CLIENT_ID =", os.getenv("CLIENT_ID"))
 print("🔍 TEST: Spotify CLIENT_SECRET =", os.getenv("CLIENT_SECRET"))
 
 app = Flask(__name__)
-@app.route('/')
-def home():
-    return "✅ Flask App is Running on Render!"
 
 # Spotify API Setup
 SPOTIFY_CLIENT_ID = os.getenv("CLIENT_ID")
@@ -20,6 +18,10 @@ spotify_client = spotipy.Spotify(
         client_id=SPOTIFY_CLIENT_ID, client_secret=SPOTIFY_CLIENT_SECRET
     )
 )
+
+@app.route('/')
+def home():
+    return "✅ Flask App is Running on Render!"
 
 @app.route('/recommend', methods=['GET', 'POST'])
 def recommend():
@@ -52,13 +54,22 @@ def recommend():
 
         artist_id = artist_search['artists']['items'][0]['id']
 
-        # 2️⃣ Ähnliche Künstler finden
-        related_artists = spotify_client.artist_related_artists(artist_id)
-        if not related_artists['artists']:
-            print("⚠️ Error: No related artists found!")
-            return render_template('index.html', error="No related artists found.")
+        # 2️⃣ Alternative: Ähnliche Künstler durch Suche basierend auf Genre
+        try:
+            print(f"⚠️ '/related-artists' is deprecated. Using alternative method.")
 
-        similar_artists = [artist['id'] for artist in related_artists['artists'][:5]]
+            # Suche nach anderen Künstlern im gleichen Genre
+            related_artists = spotify_client.search(q=user_genre, type='artist', limit=5)
+            if 'artists' in related_artists and 'items' in related_artists['artists']:
+                similar_artists = [artist['id'] for artist in related_artists['artists']['items']]
+                print(f"🔹 Found alternative artists: {similar_artists}")
+            else:
+                print("⚠️ No alternative artists found via search!")
+                return render_template('index.html', error="Could not find similar artists.")
+
+        except Exception as e:
+            print(f"⚠️ Spotify API error in alternative artist search: {e}")
+            return render_template('index.html', error="Spotify API error. Please try again later.")
 
         # 3️⃣ Top-Tracks der ähnlichen Künstler holen
         recommended_tracks = []
@@ -84,7 +95,6 @@ def recommend():
             return render_template('index.html', error="No recommendations found. Try different inputs.")
 
         # Songs zufällig sortieren
-        import random
         random.shuffle(recommended_tracks)
 
         return render_template('results.html', recommendations=recommended_tracks, mood=user_mood)
@@ -97,4 +107,4 @@ def recommend():
         return render_template('index.html', error="An unexpected error occurred. Please try again later.")
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=10000, debug=True)
