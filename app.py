@@ -23,7 +23,7 @@ def home():
     return "✅ Flask App is Running on Render!"
 
 @app.route('/recommend', methods=['GET', 'POST'])
-def recommend():
+def recommend_taste_based():
     print(f"🔹 Incoming request: {request.method}")
 
     if request.method == 'GET':
@@ -35,45 +35,41 @@ def recommend():
     user_artist = request.form.get('artist', '').strip()
     user_mood = request.form.get('mood', '').strip()
 
-    print(f"🔹 Extracted Data - Genre: {user_genre}, Artist: {user_artist}, Mood: {user_mood}")
-
     if not user_genre or not user_artist or not user_mood:
-        print("⚠️ Error: Missing form fields!")
         return render_template('index.html', error="Please fill out all fields.")
 
     try:
-        # 1️⃣ Get Artist ID
+        # 1️⃣ Identify User Preferences - Get the artist ID and associated genres
         artist_search = spotify_client.search(q=f"artist:{user_artist}", type='artist', limit=1)
         if not artist_search['artists']['items']:
             return render_template('index.html', error=f"No artist found for '{user_artist}'.")
 
         artist_id = artist_search['artists']['items'][0]['id']
         artist_genres = artist_search['artists']['items'][0].get('genres', [])
-        print(f"🔹 Artist Genres: {artist_genres}")
 
-        # 2️⃣ Use a broader track search instead of just top tracks
-        track_query = f"genre:{user_genre} mood:{user_mood}" if user_genre else f"mood:{user_mood}"
-        print(f"🔹 Searching for tracks with query: {track_query}")
+        # 2️⃣ Build a Taste Profile - Use artist genres or fallback to user input genre
+        genre_query = ' '.join([f'genre:{g}' for g in artist_genres]) if artist_genres else f'genre:{user_genre}'
+        similar_tracks = spotify_client.search(q=genre_query, type='track', limit=20)
+        
+        recommended_tracks = []
+        for track in similar_tracks['tracks']['items']:
+            track_genres = get_artist_genres(track['artists'][0]['id'])
+            track_features = spotify_client.audio_features(track['id'])[0]  # Get detailed song features
 
-        genre_tracks = spotify_client.search(q=track_query, type='track', limit=20)
-        if 'tracks' in genre_tracks and 'items' in genre_tracks['tracks']:
-            recommended_tracks = [
-                {
+            if any(genre in track_genres for genre in artist_genres):
+                popularity_score = calculate_custom_popularity(track['popularity'])
+                recommendation_score = calculate_recommendation_score(popularity_score, user_mood, track_features)
+                recommended_tracks.append({
                     "title": track['name'],
                     "artist": ", ".join([a['name'] for a in track['artists']]),
                     "link": track['external_urls']['spotify'],
                     "image": track['album']['images'][0]['url'] if track['album']['images'] else None,
-                    "popularity": calculate_custom_popularity(track['popularity'])
-                }
-                for track in genre_tracks['tracks']['items']
-            ]
-        else:
-            print("⚠️ No songs found for the given genre and mood!")
-            return render_template('index.html', error="No valid recommendations found. Try different inputs.")
+                    "popularity": popularity_score,
+                    "recommendation_score": recommendation_score
+                })
 
-        # 3️⃣ Sort by Popularity Score
-        recommended_tracks = sorted(recommended_tracks, key=lambda x: x['popularity'], reverse=True)
-        print(f"🔹 Final Sorted Tracks: {recommended_tracks}")
+        # 3️⃣ Rank by Taste Matching
+        recommended_tracks = sorted(recommended_tracks, key=lambda x: x['recommendation_score'], reverse=True)
 
         return render_template('results.html', recommendations=recommended_tracks, mood=user_mood)
 
@@ -83,8 +79,30 @@ def recommend():
         return render_template('index.html', error="An unexpected error occurred. Please try again later.")
 
 def calculate_custom_popularity(spotify_popularity):
-    """ Adjusts Spotify's 0-100 popularity score to a custom scale. """
-    return round((spotify_popularity / 100) * 10, 2)  # Scale to 1-10
+    """
+    Custom Popularity Score: Adjusts Spotify's 0-100 scale for better ranking.
+    """
+    return round((spotify_popularity / 100) * 10, 2)
+
+def calculate_recommendation_score(popularity, mood, track_features):
+    """
+    Calculates a final recommendation score based on:
+    - Popularity (how well-known the track is)
+    - Energy, Valence (happiness), and Danceability (Spotify audio features)
+    - Mood weighting (adjusts relevance based on user-selected mood)
+    """
+    mood_weights = {
+        "happy": track_features.get("valence", 0.5) * 1.5 + track_features.get("danceability", 0.5) * 1.1,
+        "energetic": track_features.get("energy", 0.5) * 1.5 + track_features.get("danceability", 0.5) * 1.3,
+        "calm": track_features.get("valence", 0.5) * 0.8 + track_features.get("energy", 0.5) * 0.7,
+        "sad": track_features.get("valence", 0.5) * 0.6 + track_features.get("energy", 0.5) * 0.8,
+    }
+    mood_score = mood_weights.get(mood.lower(), 1)
+    return round(popularity * mood_score, 2)
+
+def get_artist_genres(artist_id):
+    artist = spotify_client.artist(artist_id)
+    return artist.get('genres', [])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=True)
