@@ -53,15 +53,9 @@ def recommend():
         
         artist_id = artist_search['artists']['items'][0]['id']
         
-        # Get related artists
-        related_artists = spotify_client.artist_related_artists(artist_id)
-        similar_artist_ids = [artist['id'] for artist in related_artists['artists'][:5]]
-        
-        # Get tracks from related artists and genre
-        recommended_tracks = []
-        for artist_id in similar_artist_ids:
-            artist_top_tracks = spotify_client.artist_top_tracks(artist_id)
-            recommended_tracks.extend(artist_top_tracks['tracks'])
+        # Get top tracks of the selected artist
+        artist_top_tracks = spotify_client.artist_top_tracks(artist_id)
+        recommended_tracks = artist_top_tracks['tracks']
         
         if not recommended_tracks:
             print("⚠️ No matching songs found! Fetching genre-based tracks as fallback.")
