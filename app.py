@@ -66,12 +66,18 @@ def recommend():
         for track in recommended_tracks:
             print(f"✔️ Processing Track: {track['name']} - {track['artists'][0]['name']}")
             
+            # Fetch album details for additional context
+            album_tracks = spotify_client.album_tracks(track['album']['id'])['items']
+            album_songs = [t['name'] for t in album_tracks]
+            
             # Calculate final recommendation score using popularity
             recommendation_score = calculate_custom_popularity(track['popularity'])
             
             processed_tracks.append({
                 "title": track['name'],
                 "artist": ", ".join([a['name'] for a in track['artists']]),
+                "album": track['album']['name'],
+                "album_songs": album_songs,
                 "link": track['external_urls']['spotify'],
                 "image": track['album']['images'][0]['url'] if track['album']['images'] else None,
                 "popularity": recommendation_score
