@@ -96,10 +96,11 @@ def recommend():
         print(f"⚠️ Unexpected error: {e}")
         return render_template('index.html', error="An unexpected error occurred. Please try again later.")
 
-def calculate_custom_popularity(spotify_popularity, mood_match_score, genre_match_score):
+def calculate_custom_popularity(spotify_popularity):
     """
     Custom Popularity Score: Combines Spotify popularity with mood & genre match.
     """
     return round((spotify_popularity / 100) * 10, 2)
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=True)
+u
