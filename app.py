@@ -110,13 +110,16 @@ def generate_playlist_name(mood, genre, artist):
               f"Artist: {artist}\n"
               "The name should be creative and fun.")
     
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are a playlist name generator."},
+            {"role": "user", "content": prompt}
+        ],
         max_tokens=20
     )
     
-    name = response.choices[0].text.strip()
+    name = response.choices[0].message['content'].strip()
     return name if name else "Your Custom Playlist"
 
 def get_suggested_tracks(mood, genre, artist):
@@ -129,12 +132,15 @@ def get_suggested_tracks(mood, genre, artist):
               f"Similar to: {artist}\n"
               "Provide only the song titles in a comma-separated format.")
     
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are a music recommendation assistant."},
+            {"role": "user", "content": prompt}
+        ],
         max_tokens=50
     )
-    suggestions = response.choices[0].text.strip()
+    suggestions = response.choices[0].message['content'].strip()
     return [song.strip() for song in suggestions.split(',')] if suggestions else []
 
 if __name__ == '__main__':
