@@ -13,7 +13,7 @@ app = Flask(__name__)
 # Spotify API Setup
 SPOTIFY_CLIENT_ID = os.getenv("CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-SPOTIFY_REDIRECT_URI = "http://localhost:8888/callback"  # Placeholder redirect URI
+SPOTIFY_REDIRECT_URI = "https://csia.onrender.com/callback"  # Placeholder redirect URI
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 spotify_client = spotipy.Spotify(auth_manager=SpotifyOAuth(
