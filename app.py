@@ -94,16 +94,14 @@ def generate_playlist_name(mood, genre, artist):
     import openai
     openai.api_key = os.getenv("OPENAI_API_KEY")
     
-    prompt = (f"Create a unique and catchy playlist name based on the following details:
-"
-              f"Mood: {mood}
-"
-              f"Genre: {genre}
-"
-              f"Artist: {artist}
-"
-              "The name should be creative and fun.")
-    
+     prompt = (
+    f"Create a unique and catchy playlist name based on the following details:\n"
+    f"Mood: {mood}\n"
+    f"Genre: {genre}\n"
+    f"Artist: {artist}\n"
+    "The name should be creative and fun."
+)
+  
     response = openai.Completion.create(
         engine="text-davinci-003",
         prompt=prompt,
