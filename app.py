@@ -111,9 +111,9 @@ def generate_playlist_name(mood, genre, artist):
               "The name should be creative and fun.")
     
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-4-turbo",
         messages=[
-            {"role": "system", "content": "You are a playlist name generator."},
+            {"role": "system", "content": "You are a creative assistant for generating playlist names."},
             {"role": "user", "content": prompt}
         ],
         max_tokens=20
@@ -133,7 +133,7 @@ def get_suggested_tracks(mood, genre, artist):
               "Provide only the song titles in a comma-separated format.")
     
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-4-turbo",
         messages=[
             {"role": "system", "content": "You are a music recommendation assistant."},
             {"role": "user", "content": prompt}
