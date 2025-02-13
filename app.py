@@ -94,9 +94,9 @@ def generate_playlist_name(mood, genre, artist):
               "The name should be creative and fun.")
     
     response = openai.Completion.create(
-        engine="gpt-3.5-turbo",
+        engine="gpt-4o",
         prompt=prompt,
-        max_tokens=20
+        max_tokens=100
     )
     
     name = response.choices[0].text.strip()
@@ -113,9 +113,9 @@ def get_suggested_tracks(mood, genre, artist):
               "Provide only the song titles in a comma-separated format.")
     
     response = openai.Completion.create(
-        engine="gpt-3.5-turbo",
+        engine="gpt-4o",
         prompt=prompt,
-        max_tokens=50
+        max_tokens=100
     )
     suggestions = response.choices[0].text.strip()
     return [song.strip() for song in suggestions.split(',')] if suggestions else []
