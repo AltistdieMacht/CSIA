@@ -1,8 +1,7 @@
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
+from spotipy.oauth2 import SpotifyClientCredentials
 from flask import Flask, request, render_template, jsonify
 import os
-import random
 import openai
 
 print("🔍 TEST: Spotify CLIENT_ID =", os.getenv("CLIENT_ID"))
@@ -13,14 +12,11 @@ app = Flask(__name__)
 # Spotify API Setup
 SPOTIFY_CLIENT_ID = os.getenv("CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-SPOTIFY_REDIRECT_URI = "https://csia.onrender.com/callback"  # Placeholder redirect URI
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-spotify_client = spotipy.Spotify(auth_manager=SpotifyOAuth(
+spotify_client = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=SPOTIFY_CLIENT_ID,
-    client_secret=SPOTIFY_CLIENT_SECRET,
-    redirect_uri=SPOTIFY_REDIRECT_URI,
-    scope="playlist-modify-public"
+    client_secret=SPOTIFY_CLIENT_SECRET
 ))
 
 @app.route('/home')
@@ -50,10 +46,6 @@ def recommend():
     try:
         # Step 1: Generate a creative playlist name using OpenAI
         creative_name = generate_playlist_name(user_mood, user_genre, user_artist)
-        user_id = spotify_client.me()['id']
-        playlist = spotify_client.user_playlist_create(user=user_id, name=creative_name, public=True, description=f"A playlist for your {user_mood} mood.")
-        playlist_id = playlist['id']
-        print(f"🎵 Created Playlist: {creative_name} (ID: {playlist_id})")
         
         # Step 2: Search for tracks based on genre and mood
         search_query = f'genre:{user_genre} artist:{user_artist}'
@@ -70,21 +62,12 @@ def recommend():
                     track_uris.append(track_search['tracks']['items'][0]['uri'])
             print(f"✅ Added {len(track_uris)} tracks from OpenAI suggestions.")
         
-        # Step 4: Add tracks to the created playlist
-        if track_uris:
-            spotify_client.playlist_add_items(playlist_id, track_uris)
-            print(f"✅ Added {len(track_uris)} tracks to the playlist.")
-        else:
-            print("⚠️ No tracks found or suggested.")
+        # Step 4: Return the playlist preview and link (no actual playlist creation due to ClientCredentials)
+        preview_songs = [track['name'] for track in search_results['tracks']['items'][:5]]
+        playlist_link = "https://open.spotify.com/"  # Placeholder link for client-created playlists
+        playlist_cover = "https://via.placeholder.com/500"  # Placeholder image
+        playlist_description = "A custom playlist just for you!"
         
-        # Step 5: Fetch playlist details
-        playlist_details = spotify_client.playlist(playlist_id)
-        playlist_cover = playlist_details['images'][0]['url'] if playlist_details['images'] else "https://via.placeholder.com/500"
-        playlist_description = playlist_details.get('description', 'A custom playlist just for you!')
-        preview_songs = [track['track']['name'] for track in playlist_details['tracks']['items'][:5]]
-        
-        # Step 6: Return the playlist preview and link
-        playlist_link = playlist['external_urls']['spotify']
         return render_template('results.html', 
                                playlist_name=creative_name, 
                                playlist_link=playlist_link, 
@@ -110,16 +93,13 @@ def generate_playlist_name(mood, genre, artist):
               f"Artist: {artist}\n"
               "The name should be creative and fun.")
     
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a creative assistant for generating playlist names."},
-            {"role": "user", "content": prompt}
-        ],
+    response = openai.Completion.create(
+        engine="gpt-3.5-turbo",
+        prompt=prompt,
         max_tokens=20
     )
     
-    name = response.choices[0].message['content'].strip()
+    name = response.choices[0].text.strip()
     return name if name else "Your Custom Playlist"
 
 def get_suggested_tracks(mood, genre, artist):
@@ -132,15 +112,12 @@ def get_suggested_tracks(mood, genre, artist):
               f"Similar to: {artist}\n"
               "Provide only the song titles in a comma-separated format.")
     
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a music recommendation assistant."},
-            {"role": "user", "content": prompt}
-        ],
+    response = openai.Completion.create(
+        engine="gpt-3.5-turbo",
+        prompt=prompt,
         max_tokens=50
     )
-    suggestions = response.choices[0].message['content'].strip()
+    suggestions = response.choices[0].text.strip()
     return [song.strip() for song in suggestions.split(',')] if suggestions else []
 
 if __name__ == '__main__':
