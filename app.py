@@ -94,13 +94,14 @@ def generate_playlist_name(mood, genre, artist):
               "The name should be creative and fun.")
     
     response = openai.ChatCompletion.create(
-        engine="gpt-4o",
-        prompt=prompt,
-        max_tokens=100
+        model="gpt-4o",
+        messages=[{"role": "system", "content": "You are a creative music assistant."},
+                  {"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=20
     )
     
-    name = response.choices[0].text.strip()
-    return name if name else "Your Custom Playlist"
+    return response["choices"][0]["message"]["content"].strip()
 
 def get_suggested_tracks(mood, genre, artist):
     """
@@ -113,13 +114,14 @@ def get_suggested_tracks(mood, genre, artist):
               "Provide only the song titles in a comma-separated format.")
     
     response = openai.ChatCompletion.create(
-        engine="gpt-4o",
-        prompt=prompt,
-        max_tokens=100
+        model="gpt-4o",
+        messages=[{"role": "system", "content": "You are a music expert."},
+                  {"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=50
     )
-    suggestions = response.choices[0].text.strip()
-    return [song.strip() for song in suggestions.split(',')] if suggestions else []
-
+    
+    return [song.strip() for song in response["choices"][0]["message"]["content"].split(',')]
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=True)
