@@ -120,4 +120,6 @@ def get_suggested_tracks(mood, genre, artist):
     suggestions = response.choices[0].text.strip()
     return [song.strip() for song in suggestions.split(',')] if suggestions else []
 
-if __name__ == '__main__' 
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000, debug=True)
