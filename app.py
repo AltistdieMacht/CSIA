@@ -12,6 +12,12 @@ import base64
 # Load environment variables
 load_dotenv()
 
+# Ensure Render-style env variables are mapped for Spotipy
+if os.getenv("CLIENT_ID") and not os.getenv("SPOTIPY_CLIENT_ID"):
+    os.environ["SPOTIPY_CLIENT_ID"] = os.getenv("CLIENT_ID")
+if os.getenv("CLIENT_SECRET") and not os.getenv("SPOTIPY_CLIENT_SECRET"):
+    os.environ["SPOTIPY_CLIENT_SECRET"] = os.getenv("CLIENT_SECRET")
+
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Spotify authentication
