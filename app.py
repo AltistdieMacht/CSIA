@@ -54,17 +54,9 @@ def recommend():
     playlist_name = result_text[0].strip()
     playlist_description = result_text[1].strip()
     songs = [line.strip() for line in result_text[2:7]]
-    dalle_prompt = result_text[7] if len(result_text) > 7 else f"Album cover for a {mood} {genre} playlist"
 
-    # Step 2: Generate cover image with DALL\u00b7E 3
-    image_response = openai.Image.create(
-        model="dall-e-3",
-        prompt=dalle_prompt,
-        size="1024x1024",
-        quality="standard",
-        n=1
-    )
-    image_url = image_response['data'][0]['url']
+    # Step 2: Use placeholder image until DALL·E access is available
+    image_url = "https://via.placeholder.com/640x640?text=Playlist+Cover"
 
     # Step 3: Create Spotify Playlist
     user_id = sp.me()["id"]
@@ -84,17 +76,6 @@ def recommend():
 
     if track_uris:
         sp.playlist_add_items(playlist_id, track_uris)
-
-    # Step 5: Upload playlist cover image
-    try:
-        img_data = requests.get(image_url).content
-        img = Image.open(BytesIO(img_data)).convert("RGB").resize((640, 640))
-        buffered = BytesIO()
-        img.save(buffered, format="JPEG")
-        img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        sp.playlist_upload_cover_image(playlist_id, img_base64)
-    except Exception as e:
-        print(f"Failed to upload image: {e}")
 
     preview_songs = [song for song in songs if song]
 
