@@ -1,35 +1,30 @@
 import os
-import openai
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
 from flask import Flask, request, render_template
-from dotenv import load_dotenv
-import requests
-from PIL import Image
-from io import BytesIO
-import base64
-
-# Load environment variables
-load_dotenv()
-
-# Ensure Render-style env variables are mapped for Spotipy
-if os.getenv("CLIENT_ID") and not os.getenv("SPOTIPY_CLIENT_ID"):
-    os.environ["SPOTIPY_CLIENT_ID"] = os.getenv("CLIENT_ID")
-if os.getenv("CLIENT_SECRET") and not os.getenv("SPOTIPY_CLIENT_SECRET"):
-    os.environ["SPOTIPY_CLIENT_SECRET"] = os.getenv("CLIENT_SECRET")
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-# Spotify authentication
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-    client_id=os.getenv("SPOTIPY_CLIENT_ID"),
-    client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
-    redirect_uri=os.getenv("SPOTIPY_REDIRECT_URI"),
-    scope="playlist-modify-public ugc-image-upload",
-    username=os.getenv("SPOTIFY_USERNAME")
-))
+from spotipy import Spotify
+from spotipy.oauth2 import SpotifyOAuth
+import openai
 
 app = Flask(__name__)
+
+# Hole Umgebungsvariablen
+SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
+SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
+SPOTIPY_REFRESH_TOKEN = os.getenv("SPOTIPY_REFRESH_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Setze OpenAI API-Key
+openai.api_key = OPENAI_API_KEY
+
+# Hole dauerhaft gültiges Zugriffstoken mit dem Refresh Token
+def get_spotify_token():
+    oauth = SpotifyOAuth(
+        client_id=SPOTIPY_CLIENT_ID,
+        client_secret=SPOTIPY_CLIENT_SECRET,
+        redirect_uri="http://localhost:8888/callback",  # Dummy
+    )
+    oauth.refresh_access_token(SPOTIPY_REFRESH_TOKEN)
+    token_info = oauth.get_cached_token()
+    return token_info["access_token"]
 
 @app.route("/")
 def index():
@@ -37,54 +32,62 @@ def index():
 
 @app.route("/recommend", methods=["POST"])
 def recommend():
+    mood = request.form["mood"]
     genre = request.form["genre"]
     artist = request.form["artist"]
-    mood = request.form["mood"]
 
-    # Step 1: Use GPT-4o to generate playlist metadata
-    chat_response = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a creative music expert and playlist curator."},
-            {"role": "user", "content": f"Create a playlist with 5 songs based on the mood '{mood}', the genre '{genre}', and inspired by the artist '{artist}'. Give me:\n1. Playlist title\n2. Short description\n3. 5 song titles with artist names\n4. A short DALL\u00b7E prompt to generate a cover image"}
-        ]
+    prompt = (
+        f"Create a Spotify playlist with 5 songs based on the following mood and style:\n"
+        f"- Mood: {mood}\n"
+        f"- Genre: {genre}\n"
+        f"- Similar to: {artist}\n"
+        f"Return them as a numbered list: Song Title - Artist"
     )
 
-    result_text = chat_response.choices[0].message.content.strip().split("\n")
-    playlist_name = result_text[0].strip()
-    playlist_description = result_text[1].strip()
-    songs = [line.strip() for line in result_text[2:7]]
+    # Hole Vorschläge von OpenAI
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+    )
 
-    # Step 2: Use placeholder image until DALL·E access is available
-    image_url = "https://via.placeholder.com/640x640?text=Playlist+Cover"
+    playlist_text = response.choices[0].message["content"]
 
-    # Step 3: Create Spotify Playlist
+    # Extrahiere Songs
+    songs = []
+    for line in playlist_text.strip().split("\n"):
+        if "-" in line:
+            parts = line.split("-", 1)
+            title = parts[0].split(".")[-1].strip()
+            artist = parts[1].strip()
+            songs.append({"title": title, "artist": artist})
+
+    # Authentifiziere Spotify
+    token = get_spotify_token()
+    sp = Spotify(auth=token)
+
+    # Erstelle Playlist
     user_id = sp.me()["id"]
-    playlist = sp.user_playlist_create(user=user_id, name=playlist_name, public=True, description=playlist_description)
-    playlist_id = playlist["id"]
-    playlist_url = playlist["external_urls"]["spotify"]
+    playlist = sp.user_playlist_create(user=user_id, name=f"{mood} Vibes", public=False)
 
-    # Step 4: Search and add tracks
     track_uris = []
     for song in songs:
-        try:
-            res = sp.search(q=song, limit=1, type="track")
-            track_uri = res["tracks"]["items"][0]["uri"]
-            track_uris.append(track_uri)
-        except:
-            continue
+        query = f"{song['title']} {song['artist']}"
+        result = sp.search(q=query, limit=1, type="track")
+        tracks = result.get("tracks", {}).get("items", [])
+        if tracks:
+            track_uris.append(tracks[0]["uri"])
+            song["spotify_url"] = tracks[0]["external_urls"]["spotify"]
+            song["image"] = tracks[0]["album"]["images"][0]["url"]
+        else:
+            song["spotify_url"] = None
+            song["image"] = None
 
     if track_uris:
-        sp.playlist_add_items(playlist_id, track_uris)
+        sp.playlist_add_items(playlist_id=playlist["id"], items=track_uris)
 
-    preview_songs = [song for song in songs if song]
+    playlist_url = playlist["external_urls"]["spotify"]
 
-    return render_template("results.html",
-                           playlist_name=playlist_name,
-                           playlist_description=playlist_description,
-                           preview_songs=preview_songs,
-                           playlist_link=playlist_url,
-                           playlist_cover=image_url)
+    return render_template("results.html", songs=songs, playlist_url=playlist_url)
 
 if __name__ == "__main__":
     app.run(debug=True)
