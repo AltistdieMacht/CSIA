@@ -7,14 +7,12 @@ import openai
 
 app = Flask(__name__)
 
-# Umgebungsvariablen
 SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 SPOTIPY_REFRESH_TOKEN = os.getenv("SPOTIPY_REFRESH_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
-# Spotify Token holen
 def get_spotify_token():
     oauth = SpotifyOAuth(
         client_id=SPOTIPY_CLIENT_ID,
@@ -34,20 +32,6 @@ def recommend():
     genre = request.form.get("genre")
     artist = request.form.get("artist")
 
-    # 🎵 Playlist-Titel generieren
-    title_prompt = f"Create a short, creative Spotify playlist title based on mood '{mood}', genre '{genre}', and artist '{artist}'. Only return the title, no explanation."
-    title_response = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You're a creative music editor."},
-            {"role": "user", "content": title_prompt}
-        ],
-        temperature=0.9,
-        max_tokens=30
-    )
-    custom_title = title_response.choices[0].message["content"].strip().strip('"')
-
-    # 🎧 Hole Musikvorschläge von GPT-4o
     prompt = (
         f"Create a Spotify playlist with 5 songs based on the following mood and style:\n"
         f"- Mood: {mood}\n"
@@ -56,6 +40,7 @@ def recommend():
         f"Return them as a numbered list: Song Title - Artist"
     )
 
+    # 🎧 Musikvorschläge holen
     response = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[
@@ -65,17 +50,26 @@ def recommend():
         temperature=0.8,
         max_tokens=500
     )
-
     playlist_text = response.choices[0].message["content"]
 
-    # Extrahiere Songs
+    # Titel generieren
+    title_prompt = f"Generate a catchy playlist title for a playlist that is {mood}, in the {genre} genre, and inspired by {artist}. Only return the title."
+    title_response = openai.ChatCompletion.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": title_prompt}],
+        temperature=0.7,
+        max_tokens=20
+    )
+    custom_title = title_response.choices[0].message["content"].strip()
+
+    # Songs extrahieren
     songs = []
     for line in playlist_text.strip().split("\n"):
         if "-" in line:
             parts = line.split("-", 1)
             title = parts[0].split(".")[-1].strip()
-            artist = parts[1].strip()
-            songs.append({"title": title, "artist": artist})
+            artist_name = parts[1].strip()
+            songs.append({"title": title, "artist": artist_name})
 
     # Spotify Auth
     token = get_spotify_token()
@@ -103,7 +97,7 @@ def recommend():
 
     playlist_url = playlist["external_urls"]["spotify"]
 
-    # 🖼️ DALL·E 3 Prompt
+    # 🎨 DALL·E 3 Image
     image_prompt = f"Abstract album cover artwork representing a {mood} mood in {genre} genre, inspired by {artist}. Vibrant, emotional, and high-resolution."
     image_response = openai.Image.create(
         model="dall-e-3",
@@ -112,10 +106,10 @@ def recommend():
         size="1024x1024",
         response_format="b64_json"
     )
-
     image_b64 = image_response["data"][0]["b64_json"]
+    cover_url = f"data:image/png;base64,{image_b64}"
 
-    return render_template("results.html", songs=songs, playlist_url=playlist_url, playlist_image=image_b64, custom_title=custom_title)
+    return render_template("results.html", songs=songs, playlist_url=playlist_url, playlist_image=cover_url, custom_title=custom_title)
 
 if __name__ == "__main__":
     app.run(debug=True)
