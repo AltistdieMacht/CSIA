@@ -34,6 +34,20 @@ def recommend():
     genre = request.form.get("genre")
     artist = request.form.get("artist")
 
+    # 🎵 Playlist-Titel generieren
+    title_prompt = f"Create a short, creative Spotify playlist title based on mood '{mood}', genre '{genre}', and artist '{artist}'. Only return the title, no explanation."
+    title_response = openai.ChatCompletion.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You're a creative music editor."},
+            {"role": "user", "content": title_prompt}
+        ],
+        temperature=0.9,
+        max_tokens=30
+    )
+    custom_title = title_response.choices[0].message["content"].strip().strip('"')
+
+    # 🎧 Hole Musikvorschläge von GPT-4o
     prompt = (
         f"Create a Spotify playlist with 5 songs based on the following mood and style:\n"
         f"- Mood: {mood}\n"
@@ -42,7 +56,6 @@ def recommend():
         f"Return them as a numbered list: Song Title - Artist"
     )
 
-    # 🎧 Hole Musikvorschläge von GPT-4o
     response = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[
@@ -69,7 +82,7 @@ def recommend():
     sp = Spotify(auth=token)
 
     user_id = sp.me()["id"]
-    playlist = sp.user_playlist_create(user=user_id, name=f"{mood} Vibes", public=False)
+    playlist = sp.user_playlist_create(user=user_id, name=custom_title, public=False)
 
     track_uris = []
     for song in songs:
@@ -102,7 +115,7 @@ def recommend():
 
     image_b64 = image_response["data"][0]["b64_json"]
 
-    return render_template("results.html", songs=songs, playlist_url=playlist_url, playlist_image=image_b64)
+    return render_template("results.html", songs=songs, playlist_url=playlist_url, playlist_image=image_b64, custom_title=custom_title)
 
 if __name__ == "__main__":
     app.run(debug=True)
