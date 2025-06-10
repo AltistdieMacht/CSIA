@@ -76,7 +76,7 @@ def recommend():
     sp = Spotify(auth=token)
 
     user_id = sp.me()["id"]
-    playlist = sp.user_playlist_create(user=user_id, name=custom_title, public=False)
+    playlist = sp.user_playlist_create(user=user_id, name=custom_title, public=True)
 
     track_uris = []
     for song in songs:
@@ -113,3 +113,4 @@ def recommend():
 
 if __name__ == "__main__":
     app.run(debug=True)
+    
