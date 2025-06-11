@@ -38,6 +38,7 @@ def recommend():
         f"- Genre: {genre}\n"
         f"- Similar to: {artist}\n"
         f"Return them as a numbered list: Song Title - Artist"
+        f"Only suggest songs that are availble onj Spotify"
     )
 
     # 🎧 Musikvorschläge holen
@@ -112,5 +113,5 @@ def recommend():
     return render_template("results.html", songs=songs, playlist_url=playlist_url, playlist_image=cover_url, custom_title=custom_title)
 
 if __name__ == "__main__":
-    app.run(debug=True)
-    
+   app.run(debug=True)
+   
