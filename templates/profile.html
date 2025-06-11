@@ -2,32 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Playlist Results</title>
+  <title>Your Profile</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
 
-  <!-- Navbar oben -->
+  <!-- Navbar -->
   <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom mb-4 px-4">
     <a class="navbar-brand" href="/">🎵 Music Magic</a>
     <div class="ms-auto">
       {% if user %}
-        <span class="me-3">Welcome, <strong>{{ user }}</strong></span>
-        <a href="/profile" class="btn btn-outline-secondary btn-sm me-2">My Playlists</a>
+        <span class="me-3">Logged in as <strong>{{ user }}</strong></span>
+        <a href="/" class="btn btn-outline-primary btn-sm me-2">Back to Search</a>
         <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
-      {% else %}
-        <a href="/login" class="btn btn-outline-primary btn-sm me-2">Login</a>
-        <a href="/register" class="btn btn-outline-success btn-sm">Register</a>
       {% endif %}
     </div>
   </nav>
 
-  <!-- Hier folgt DEIN bestehender HTML-Inhalt (NICHT verändert) -->
-
-  <!-- Zurück zur Suche -->
-  <div class="text-center mt-5">
-    <a href="/" class="btn btn-primary">⬅️ Back to Search</a>
-  </div>
+  <!-- DEIN VORHANDENER PROFILINHALT -->
+  <!-- ... -->
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>

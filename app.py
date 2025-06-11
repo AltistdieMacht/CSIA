@@ -1,18 +1,28 @@
 import os
 import base64
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, redirect, url_for, session
 from spotipy import Spotify
 from spotipy.oauth2 import SpotifyOAuth
 import openai
+from flask_session import Session
 
 app = Flask(__name__)
+app.secret_key = "supersecretkey"
+app.config["SESSION_TYPE"] = "filesystem"
+Session(app)
 
+# Fake User DB (email as key)
+users = {}
+user_playlists = {}
+
+# Umgebungsvariablen
 SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 SPOTIPY_REFRESH_TOKEN = os.getenv("SPOTIPY_REFRESH_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
+# Spotify Token holen
 def get_spotify_token():
     oauth = SpotifyOAuth(
         client_id=SPOTIPY_CLIENT_ID,
@@ -24,7 +34,34 @@ def get_spotify_token():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", user=session.get("name"))
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        name = request.form["name"]
+        email = request.form["email"]
+        password = request.form["password"]
+        users[email] = {"name": name, "password": password}
+        return redirect(url_for("login"))
+    return render_template("register.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form["email"]
+        password = request.form["password"]
+        user = users.get(email)
+        if user and user["password"] == password:
+            session["email"] = email
+            session["name"] = user["name"]
+            return redirect(url_for("index"))
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("index"))
 
 @app.route("/recommend", methods=["POST"])
 def recommend():
@@ -38,10 +75,8 @@ def recommend():
         f"- Genre: {genre}\n"
         f"- Similar to: {artist}\n"
         f"Return them as a numbered list: Song Title - Artist"
-        f"Only suggest songs that are availble onj Spotify"
     )
 
-    # 🎧 Musikvorschläge holen
     response = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[
@@ -51,33 +86,22 @@ def recommend():
         temperature=0.8,
         max_tokens=500
     )
+
     playlist_text = response.choices[0].message["content"]
 
-    # Titel generieren
-    title_prompt = f"Generate a catchy playlist title for a playlist that is {mood}, in the {genre} genre, and inspired by {artist}. Only return the title."
-    title_response = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": title_prompt}],
-        temperature=0.7,
-        max_tokens=20
-    )
-    custom_title = title_response.choices[0].message["content"].strip()
-
-    # Songs extrahieren
     songs = []
     for line in playlist_text.strip().split("\n"):
         if "-" in line:
             parts = line.split("-", 1)
             title = parts[0].split(".")[-1].strip()
-            artist_name = parts[1].strip()
-            songs.append({"title": title, "artist": artist_name})
+            artist = parts[1].strip()
+            songs.append({"title": title, "artist": artist})
 
-    # Spotify Auth
     token = get_spotify_token()
     sp = Spotify(auth=token)
 
     user_id = sp.me()["id"]
-    playlist = sp.user_playlist_create(user=user_id, name=custom_title, public=True)
+    playlist = sp.user_playlist_create(user=user_id, name=f"{mood} Vibes", public=True)
 
     track_uris = []
     for song in songs:
@@ -98,7 +122,13 @@ def recommend():
 
     playlist_url = playlist["external_urls"]["spotify"]
 
-    # 🎨 DALL·E 3 Image
+    if "email" in session:
+        email = session["email"]
+        user_playlists.setdefault(email, []).append({
+            "title": f"{mood} Vibes",
+            "url": playlist_url
+        })
+
     image_prompt = f"Abstract album cover artwork representing a {mood} mood in {genre} genre, inspired by {artist}. Vibrant, emotional, and high-resolution."
     image_response = openai.Image.create(
         model="dall-e-3",
@@ -107,11 +137,19 @@ def recommend():
         size="1024x1024",
         response_format="b64_json"
     )
-    image_b64 = image_response["data"][0]["b64_json"]
-    cover_url = f"data:image/png;base64,{image_b64}"
 
-    return render_template("results.html", songs=songs, playlist_url=playlist_url, playlist_image=cover_url, custom_title=custom_title)
+    image_b64 = image_response["data"][0]["b64_json"]
+
+    return render_template("results.html", songs=songs, playlist_url=playlist_url, playlist_image=image_b64, user=session.get("name"))
+
+@app.route("/profile")
+def profile():
+    email = session.get("email")
+    name = session.get("name")
+    if not email:
+        return redirect(url_for("login"))
+    playlists = user_playlists.get(email, [])
+    return render_template("profile.html", playlists=playlists, user=name)
 
 if __name__ == "__main__":
-   app.run(debug=True)
-   
+    app.run(debug=True)
