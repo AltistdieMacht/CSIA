@@ -13,11 +13,15 @@
         <h1 class="display-5">Welcome to Your Music Recommendation Hub</h1>
         <p class="lead">Find music that matches your mood and preferences!</p>
 
-        <!-- Spotify navigation buttons -->
+        <!-- Spotify navigation buttons (dynamic) -->
         <div class="mt-3">
-            <a href="/login" class="btn btn-light btn-sm">Login with Spotify</a>
-            <a href="/profile" class="btn btn-outline-light btn-sm">Profile</a>
-            <a href="/history" class="btn btn-outline-light btn-sm">History</a>
+            {% if session.token_info %}
+                <a href="/profile" class="btn btn-outline-light btn-sm">Profile</a>
+                <a href="/history" class="btn btn-outline-light btn-sm">History</a>
+                <a href="/logout" class="btn btn-danger btn-sm">Logout</a>
+            {% else %}
+                <a href="/login" class="btn btn-light btn-sm">Login with Spotify</a>
+            {% endif %}
         </div>
     </header>
 
