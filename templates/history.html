@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,8 +31,15 @@
                     <ul class="list-group">
                         {% for entry in history %}
                             <li class="list-group-item">
-                                <strong>Prompt:</strong> {{ entry.prompt }}<br>
-                                <strong>Result:</strong> {{ entry.result }}
+                                <p><strong>Prompt:</strong> {{ entry.prompt }}</p>
+                                <p><strong>Result:</strong> {{ entry.result }}</p>
+                                {% if entry.playlist_url %}
+                                    <a href="{{ entry.playlist_url }}" target="_blank" class="btn btn-sm btn-success">
+                                        🎵 Open Playlist
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted">No playlist saved</span>
+                                {% endif %}
                             </li>
                         {% endfor %}
                     </ul>
@@ -49,4 +55,3 @@
     </footer>
 </body>
 </html>
-        >

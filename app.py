@@ -153,43 +153,75 @@ def index():
 # -----------------------------
 @app.route("/recommend", methods=["POST"])
 def recommend():
-    """Main logic for generating playlist (existing, plus save to history)."""
-    genre = request.form.get("genre")
-    artist = request.form.get("artist")
-    mood = request.form.get("mood")
+    genre = request.form["genre"]
+    artist = request.form["artist"]
+    mood = request.form["mood"]
 
-    # --- Your existing OpenAI + Spotify logic here ---
-    # Example placeholders:
-    custom_title = f"{mood} {genre} vibes by {artist}"
-    playlist_image = "https://via.placeholder.com/300"
-    songs = [
-        {"title": "Song 1", "artist": artist, "image": None, "spotify_url": None},
-        {"title": "Song 2", "artist": artist, "image": None, "spotify_url": None}
-    ]
-    playlist_url = "https://open.spotify.com/playlist/example"
+    prompt = f"Create a short playlist with 5 songs similar to {artist}, in the {genre} genre, that match a {mood} mood."
 
-    # --- NEW: Save to history if user is logged in ---
+    # === GPT: Generate song suggestions ===
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=100
+    )
+    song_text = response.choices[0].message.content.strip()
+    song_list = song_text.split("\n")
+
+    # === Spotify API: Get track URIs ===
+    token_info = session.get("token_info")
+    sp = spotipy.Spotify(auth=token_info["access_token"]) if token_info else None
+
+    track_uris = []
+    if sp:
+        for song in song_list:
+            result = sp.search(q=song, limit=1, type="track")
+            if result["tracks"]["items"]:
+                track_uris.append(result["tracks"]["items"][0]["uri"])
+
+        # Playlist erstellen
+        user_id = sp.current_user()["id"]
+        playlist = sp.user_playlist_create(user_id, f"{mood} {genre} vibes by {artist}", public=True)
+        sp.playlist_add_items(playlist["id"], track_uris)
+
+        playlist_url = playlist["external_urls"]["spotify"]
+
+        # Song-Details inkl. Spotify-Links
+        track_links = []
+        for uri in track_uris:
+            track = sp.track(uri)
+            track_links.append({
+                "name": track["name"],
+                "artist": track["artists"][0]["name"],
+                "url": track["external_urls"]["spotify"]
+            })
+    else:
+        # Falls kein Spotify-Login vorhanden → nur Text anzeigen
+        track_links = [{"name": s, "artist": "Unknown", "url": "#"} for s in song_list]
+        playlist_url = None
+
+    # === DALL·E: Generate playlist cover ===
+    image_response = client.images.generate(
+        model="gpt-image-1",
+        prompt=f"Album cover art for a playlist inspired by {artist}, genre {genre}, mood {mood}",
+        size="512x512"
+    )
+    image_url = image_response.data[0].url
+
+    # === Save history (falls Spotify eingeloggt) ===
     try:
-        token_info = get_token_info()
-        if token_info:
-            sp_u = spotipy.Spotify(auth=token_info["access_token"])
-            me = sp_u.current_user()
-            prompt_text = f"{genre}, {artist}, {mood}"
-            conn = sqlite3.connect("app.db")
-            c = conn.cursor()
-            c.execute("INSERT INTO history (spotify_id, prompt, playlist_url) VALUES (?, ?, ?)",
-                      (me["id"], prompt_text.strip(", "), playlist_url))
-            conn.commit()
-            conn.close()
-    except Exception:
+        save_history(prompt, ", ".join([t["name"] for t in track_links]))
+    except:
         pass
 
+    # === Render Template ===
     return render_template(
         "results.html",
-        custom_title=custom_title,
-        playlist_image=playlist_image,
-        songs=songs,
-        playlist_url=playlist_url
+        prompt=prompt,
+        songs=track_links,
+        playlist_url=playlist_url,
+        image_url=image_url,
+        session=session
     )
 
 # -----------------------------
