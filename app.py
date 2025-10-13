@@ -71,9 +71,13 @@ def recommend():
             messages=[{
                 "role": "user",
                 "content": (
-                    f"Create a short Spotify playlist idea with a creative title and exactly 5 songs. "
-                    f"It should be inspired by {artist}, in the {genre} genre, matching a {mood} mood. "
-                    f"Format:\nTitle: <playlist title>\nSongs:\n1. <song> - <artist>"
+                   f"Generate a short playlist with exactly 5 songs that stylistically and lyrically match "
+    f"the artist '{artist}', within the '{genre}' genre, and fit a '{mood}' mood. "
+    f"If the artist is older (for example, classic rock or 20th-century artists), "
+    f"you may include both modern and older songs that align with their style. "
+    f"For modern artists, prioritize songs released after 2010. "
+    f"Return only song title and artist names in plain text list format."
+
                 )
             }],
             max_tokens=300,
