@@ -2,16 +2,17 @@ import os
 import time
 from datetime import timedelta
 from flask import Flask, render_template, request, redirect, url_for, session
-import spotipy
+from spotipy import Spotify
 from spotipy.oauth2 import SpotifyOAuth
 import openai
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
+app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = os.getenv("SECRET_KEY", "dev")
 app.permanent_session_lifetime = timedelta(hours=2)
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Spotify OAuth setup
 sp_oauth = SpotifyOAuth(
     client_id=os.getenv("SPOTIPY_CLIENT_ID"),
     client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
@@ -20,7 +21,7 @@ sp_oauth = SpotifyOAuth(
 )
 
 def get_token():
-    token_info = session.get("token_info")
+    token_info = session.get("token_info", None)
     if not token_info:
         return None
     now = int(time.time())
@@ -31,7 +32,8 @@ def get_token():
 
 @app.route("/")
 def index():
-    if not get_token():
+    token_info = get_token()
+    if not token_info:
         return redirect(url_for("login"))
     return render_template("index.html")
 
@@ -58,70 +60,78 @@ def recommend():
     if not token_info:
         return redirect(url_for("login"))
 
-    genre = request.form.get("genre", "").strip()
-    artist = request.form.get("artist", "").strip()
-    mood = request.form.get("mood", "").strip()
+    genre = request.form.get("genre", "")
+    artist = request.form.get("artist", "")
+    mood = request.form.get("mood", "")
 
-    custom_title = f"Create a short playlist with 5 songs similar to {artist}, in the {genre} genre, that match a {mood} mood."
-
-    # ---- GPT: Generate songs ----
+    # GPT – Generate playlist title & songs
     try:
-        chat = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": f"List 5 songs with artist names for this idea: {custom_title}. Format: Title - Artist"}],
-            max_tokens=150,
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Create a short Spotify playlist idea with a creative title and exactly 5 songs. "
+                    f"It should be inspired by {artist}, in the {genre} genre, matching a {mood} mood. "
+                    f"Format:\nTitle: <playlist title>\nSongs:\n1. <song> - <artist>"
+                )
+            }],
+            max_tokens=300,
             temperature=0.7
         )
-        raw = chat.choices[0].message.content.strip()
-        lines = [ln.strip("•- ") for ln in raw.split("\n") if ln.strip()]
+        text = response.choices[0].message.content.strip()
+        title_line = next((ln for ln in text.split("\n") if ln.lower().startswith("title:")), None)
+        playlist_title = title_line.split(":", 1)[1].strip() if title_line else "Your AI Playlist"
+        song_lines = [ln.split(".", 1)[-1].strip() for ln in text.split("\n") if "-" in ln]
     except Exception:
-        lines = []
+        playlist_title = "Your AI Playlist"
+        song_lines = []
 
-    sp = spotipy.Spotify(auth=token_info["access_token"])
+    sp = Spotify(auth=token_info["access_token"])
     songs, uris = [], []
 
-    for line in lines[:5]:
-        parts = [p.strip() for p in line.split("-", 1)]
-        query = line if len(parts) < 2 else f'track:"{parts[0]}" artist:"{parts[1]}"'
+    # Search each song on Spotify
+    for line in song_lines[:5]:
         try:
-            res = sp.search(q=query, type="track", limit=3)
+            name, artist_name = [x.strip() for x in line.split("-", 1)]
+            res = sp.search(q=f"track:{name} artist:{artist_name}", type="track", limit=1)
             items = res.get("tracks", {}).get("items", [])
             if not items:
                 continue
-            t = items[0]
+            track = items[0]
             songs.append({
-                "title": t["name"],
-                "artist": t["artists"][0]["name"],
-                "image": t["album"]["images"][1]["url"] if t["album"]["images"] else None,
-                "spotify_url": t["external_urls"]["spotify"]
+                "title": track["name"],
+                "artist": track["artists"][0]["name"],
+                "image": track["album"]["images"][1]["url"] if track["album"]["images"] else None,
+                "spotify_url": track["external_urls"]["spotify"]
             })
-            uris.append(t["uri"])
+            uris.append(track["uri"])
         except Exception:
             continue
 
+    # Create Spotify playlist
     playlist_url = None
     if uris:
         user_id = sp.current_user()["id"]
-        pl = sp.user_playlist_create(user=user_id, name=f"{mood} {genre} vibes by {artist}", public=True)
+        pl = sp.user_playlist_create(user=user_id, name=playlist_title, public=True)
         sp.playlist_add_items(pl["id"], uris)
         playlist_url = pl["external_urls"]["spotify"]
 
-    # ---- DALL·E: Generate cover ----
+    # DALL·E – Generate cover
     playlist_image = None
     try:
-        img = openai.Image.create(
+        image = openai.Image.create(
             model="dall-e-3",
-            prompt=f"Modern album cover for a Spotify playlist inspired by {artist}, {genre} genre, {mood} mood. Clean, artistic, minimal.",
-            size="1024x1024",
-            n=1
+            prompt=f"Modern Spotify playlist cover for '{playlist_title}', {genre} genre, {mood} vibe.",
+            size="1024x1024"
         )
-        playlist_image = img["data"][0]["url"]
+        playlist_image = image["data"][0]["url"]
     except Exception:
         playlist_image = None
 
     return render_template(
         "results.html",
-        custom_title=custom_title,
+        playlist_title=playlist_title,
         songs=songs,
         playlist_url=playlist_url,
         playlist_image=playlist_image
