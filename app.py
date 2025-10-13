@@ -6,25 +6,21 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import openai
 
-# === Flask Setup ===
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret")
-app.permanent_session_lifetime = timedelta(hours=1)
+app.permanent_session_lifetime = timedelta(hours=2)
 
-# === OpenAI Setup ===
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# === Spotify OAuth Setup (nutzt deine SPOTIPY_ Keys) ===
 sp_oauth = SpotifyOAuth(
     client_id=os.getenv("SPOTIPY_CLIENT_ID"),
     client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
     redirect_uri=os.getenv("SPOTIPY_REDIRECT_URI"),
-    scope="user-read-email user-top-read playlist-modify-public"
+    scope="user-read-email user-top-read playlist-modify-public playlist-modify-private"
 )
 
-# === Helper für Tokens ===
 def get_token():
-    token_info = session.get("token_info", None)
+    token_info = session.get("token_info")
     if not token_info:
         return None
     now = int(time.time())
@@ -33,13 +29,11 @@ def get_token():
         session["token_info"] = token_info
     return token_info
 
-# === Routes ===
-
 @app.route("/")
 def index():
     if not get_token():
         return redirect(url_for("login"))
-    return render_template("index.html", session=session)
+    return render_template("index.html")
 
 @app.route("/login")
 def login():
@@ -64,84 +58,71 @@ def recommend():
     if not token_info:
         return redirect(url_for("login"))
 
-    genre = request.form["genre"]
-    artist = request.form["artist"]
-    mood = request.form["mood"]
+    genre = (request.form.get("genre") or "").strip()
+    artist = (request.form.get("artist") or "").strip()
+    mood = (request.form.get("mood") or "").strip()
+    custom_title = f"Create a short playlist with 5 songs similar to {artist}, in the {genre} genre, that match a {mood} mood."
 
-    prompt = f"Create a short playlist with 5 songs similar to {artist}, in the {genre} genre, that match a {mood} mood."
-
-    # === GPT: Generate song suggestions ===
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=100
+        chat = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": f"List 5 song titles with artist names that match this: {custom_title}. Output one per line as 'Title - Artist'."}],
+            max_tokens=140,
+            temperature=0.7
         )
-        song_text = response.choices[0].message.content.strip()
-        song_list = [s.strip() for s in song_text.split("\n") if s.strip()]
-    except Exception as e:
-        return render_template("results.html",
-                               prompt=prompt,
-                               songs=[],
-                               playlist_url=None,
-                               image_url=None,
-                               error="OpenAI request failed. Please try again later.",
-                               session=session)
+        raw = chat.choices[0].message.content.strip()
+        lines = [ln.strip("-• ").strip() for ln in raw.split("\n") if ln.strip()]
+    except Exception:
+        return render_template("results.html", custom_title=custom_title, playlist_image=None, songs=[], playlist_url="#")
 
-    # === Spotify: Search + Playlist erstellen ===
-    track_links, playlist_url = [], None
+    sp = spotipy.Spotify(auth=token_info["access_token"])
+
+    track_uris = []
+    songs = []
+    for line in lines[:5]:
+        parts = [p.strip() for p in line.split(" - ", 1)]
+        query = line
+        if len(parts) == 2:
+            query = f'track:"{parts[0]}" artist:"{parts[1]}"'
+        res = sp.search(q=query, type="track", limit=1)
+        items = res.get("tracks", {}).get("items", [])
+        if not items:
+            continue
+        t = items[0]
+        track_uris.append(t["uri"])
+        songs.append({
+            "title": t["name"],
+            "artist": t["artists"][0]["name"],
+            "image": (t["album"]["images"][1]["url"] if t["album"]["images"] else None),
+            "spotify_url": t["external_urls"]["spotify"]
+        })
+
+    playlist_url = "#"
+    if track_uris:
+        me = sp.current_user()["id"]
+        pl = sp.user_playlist_create(user=me, name=f"{mood} {genre} vibes by {artist}".strip(), public=True)
+        sp.playlist_add_items(pl["id"], track_uris)
+        playlist_url = pl["external_urls"]["spotify"]
+
+    playlist_image = None
     try:
-        sp = spotipy.Spotify(auth=token_info["access_token"])
-        track_uris = []
-        for song in song_list:
-            result = sp.search(q=song, limit=1, type="track")
-            if result["tracks"]["items"]:
-                uri = result["tracks"]["items"][0]["uri"]
-                track_uris.append(uri)
-
-        if track_uris:
-            user_id = sp.current_user()["id"]
-            playlist = sp.user_playlist_create(user_id, f"{mood} {genre} vibes by {artist}", public=True)
-            sp.playlist_add_items(playlist["id"], track_uris)
-            playlist_url = playlist["external_urls"]["spotify"]
-
-            for uri in track_uris:
-                track = sp.track(uri)
-                track_links.append({
-                    "name": track["name"],
-                    "artist": track["artists"][0]["name"],
-                    "url": track["external_urls"]["spotify"]
-                })
-    except Exception as e:
-        return render_template("results.html",
-                               prompt=prompt,
-                               songs=[],
-                               playlist_url=None,
-                               image_url=None,
-                               error="Spotify request failed. Please log in again.",
-                               session=session)
-
-    # === DALL·E Cover ===
-    image_url = None
-    try:
-        image_response = openai.Image.create(
-            model="gpt-image-1",
-            prompt=f"Album cover art for a playlist inspired by {artist}, genre {genre}, mood {mood}",
-            size="512x512"
+        img = openai.Image.create(
+            model="dall-e-3",
+            prompt=f"Album cover art for a playlist inspired by {artist}, {genre} genre, {mood} mood. Minimal, modern, high contrast.",
+            size="1024x1024",
+            n=1
         )
-        image_url = image_response["data"][0]["url"]
-    except Exception as e:
-        image_url = None
+        playlist_image = img["data"][0]["url"]
+    except Exception:
+        playlist_image = None
 
-    # === Render ===
-    return render_template("results.html",
-                           prompt=prompt,
-                           songs=track_links,
-                           playlist_url=playlist_url,
-                           image_url=image_url,
-                           error=None,
-                           session=session)
+    return render_template(
+        "results.html",
+        custom_title=custom_title,
+        playlist_image=playlist_image,
+        songs=songs,
+        playlist_url=playlist_url
+    )
 
-# === Run locally ===
 if __name__ == "__main__":
     app.run(debug=True)
