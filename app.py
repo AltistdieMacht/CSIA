@@ -50,7 +50,8 @@ def callback():
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    return render_template("login.html")
+
 
 @app.route("/recommend", methods=["POST"])
 def recommend():
