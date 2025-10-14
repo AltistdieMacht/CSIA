@@ -64,31 +64,44 @@ def recommend():
     artist = request.form.get("artist", "")
     mood = request.form.get("mood", "")
 
-    # GPT – Generate playlist title & songs
+    # GPT – Generate playlist title & songs (improved version)
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[{
                 "role": "user",
                 "content": (
-                   f"Generate a short playlist with exactly 5 songs that stylistically and lyrically match "
-    f"the artist '{artist}', within the '{genre}' genre, and fit a '{mood}' mood. "
-    f"If the artist is older (for example, classic rock or 20th-century artists), "
-    f"you may include both modern and older songs that align with their style. "
-    f"For modern artists, prioritize songs released after 2010. "
-    f"Return only song title and artist names in plain text list format."
-
+                    f"Create a playlist title and a list of exactly 5 songs that match the artist '{artist}', "
+                    f"in the '{genre}' genre, and fit a '{mood}' mood. "
+                    f"The title should be short, creative, and sound like a real Spotify playlist name "
+                    f"(e.g., 'Midnight Reflections' or 'Summer Drive'). "
+                    f"If the artist is older (for example, classic rock or 20th-century artists), "
+                    f"you may include both modern and older songs that align with their style. "
+                    f"For modern artists, prioritize songs released after 2010. "
+                    f"Format the response as:\n\n"
+                    f"Title: <playlist title>\n"
+                    f"1. <song> - <artist>\n"
+                    f"2. <song> - <artist>\n"
+                    f"3. <song> - <artist>\n"
+                    f"4. <song> - <artist>\n"
+                    f"5. <song> - <artist>\n"
                 )
             }],
             max_tokens=300,
-            temperature=0.7
+            temperature=0.8
         )
+
         text = response.choices[0].message.content.strip()
+
+        # Extract playlist title
         title_line = next((ln for ln in text.split("\n") if ln.lower().startswith("title:")), None)
-        playlist_title = title_line.split(":", 1)[1].strip() if title_line else "Your AI Playlist"
+        playlist_title = title_line.split(":", 1)[1].strip() if title_line else "AI-Generated Playlist"
+
+        # Extract songs
         song_lines = [ln.split(".", 1)[-1].strip() for ln in text.split("\n") if "-" in ln]
+
     except Exception:
-        playlist_title = "Your AI Playlist"
+        playlist_title = "AI-Generated Playlist"
         song_lines = []
 
     sp = Spotify(auth=token_info["access_token"])
